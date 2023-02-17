@@ -54,12 +54,6 @@ cp $0 /mnt
 # Chroot in till det nya systemet
 arch-chroot /mnt /bin/bash <<EOF
 
-for part in /dev/disk/by-uuid/*; do
-    if ! [[ $(readlink -f $part) =~ "vda2" ]]; then
-        tune2fs -o discard $part
-    fi
-done
-
 # Aktivera multilib i pacman.conf
 sed -i 's/^#\[multilib\]/\[multilib\]/' /etc/pacman.conf
 sed -i 's/^#Include = \/etc\/pacman.d\/mirrorlist/Include = \/etc\/pacman.d\/mirrorlist/' /etc/pacman.conf
