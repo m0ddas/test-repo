@@ -20,7 +20,7 @@ if [ "$partition" == "y" ]; then
 
 # Om användaren väljer att inte partitionera hårddisken
 else
-  # Fråga användaren om partitionen /dev/nvme0n1p4 ska formateras
+  # Fråga användaren om partitionen /dev/vda4 ska formateras
   read -p "Vill du formatera /dev/vda4? (y/n): " format
 
   # Om användaren väljer att formatera partitionen
@@ -55,7 +55,7 @@ cp $0 /mnt
 arch-chroot /mnt /bin/bash <<EOF
 
 for part in /dev/disk/by-uuid/*; do
-    if ! [[ $(readlink -f $part) =~ "nvme0n1p2" ]]; then
+    if ! [[ $(readlink -f $part) =~ "vda2" ]]; then
         tune2fs -o discard $part
     fi
 done
