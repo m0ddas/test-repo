@@ -42,6 +42,8 @@ else
   mkfs.ext4 /dev/vda3
 fi
 
+done
+
 # Monteringspunkt för /, /boot och /home
 mount /dev/vda3 /mnt
 mkdir /mnt/boot
@@ -92,9 +94,9 @@ echo "Hostname uppdaterat till $hostname"
 echo "127.0.0.1 localhost" | tee -a /etc/hosts
 echo "::1       localhost" | tee -a /etc/hosts
 echo "127.0.1.1 arch-laptop.localdomain arch-laptop" | tee -a /etc/hosts
-echo "::1        localhost ip6-localhost ip6-loopback" | tee -a /etc/hosts
-echo "ff02::1    ip6-allnodes" | tee -a /etc/hosts
-echo "ff02::2    ip6-allrouters" | tee -a /etc/hosts
+echo "::1       localhost ip6-localhost ip6-loopback" | tee -a /etc/hosts
+echo "ff02::1   ip6-allnodes" | tee -a /etc/hosts
+echo "ff02::2   ip6-allrouters" | tee -a /etc/hosts
 
 # Skapa en array av val
 val_array=($val)
@@ -163,6 +165,8 @@ fi
 read -p "Enable Parallel Downloads? (y/n)" answer
 if [[ "$answer" == [yY] ]]; then
     sed -i 's/^#ParallelDownloads/ParallelDownloads/' /etc/pacman.conf
+fi
+done
 
 # Install and configure the bootloader (systemd-boot in this example)
 bootctl install
@@ -215,9 +219,13 @@ do
     fi
 done
 
-for part in /dev/disk/by-uuid/*; do
-    if ! [[ $(readlink -f $part) =~ "vda2" ]]; then
-        tune2fs -o discard $part
+lsblk -no UUID,TYPE | while read uuid type; do
+    if [ "$type" != "swap" ]; then
+        # Add the discard flag to fstab
+        sed -i "s/UUID=$uuid.*/& ,discard/" /etc/fstab
+
+        # Discard unused blocks on the partition
+        tune2fs -o discard /dev/disk/by-uuid/$uuid
     fi
 done
 
