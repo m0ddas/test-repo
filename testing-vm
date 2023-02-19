@@ -15,8 +15,8 @@ read -p "Behöver du partitionera hårddisken? (y/n): " partition
   # Skapa partitioner för /boot efi, swap, / och /home
   parted /dev/vda gpt mkpart primary fat32 1MiB 1GiB set 1 esp on
   parted /dev/vda mkpart primary linux-swap 1GiB 4GiB
-  parted /dev/vda mkpart primary ext4 4GiB 20GiB
-  parted /dev/vda mkpart primary ext4 20GiB 100% 
+  parted /dev/vda mkpart primary ext4 4GiB 30GiB
+  parted /dev/vda mkpart primary ext4 30GiB 100% 
 
   # Formatera partitionerna för /boot efi, swap, / och /home
   mkfs.fat -F32 /dev/vda1
@@ -58,21 +58,30 @@ sed -i 's/^#ParallelDownloads/ParallelDownloads/' /etc/pacman.conf
 # Installera Arch Linux bas systemet
 pacstrap /mnt base base-devel linux linux-firmware nano
 
+# Generera fstab
+genfstab -U /mnt >> /mnt/etc/fstab
+
+# Kopiera over scriptet till det nya systemet
+cp $0 /mnt
+
+# Chroot in till det nya systemet
+arch-chroot /mnt /bin/bash <<EOF
+
 # Ställa in tidszon och klocka
-ln -sf /usr/share/zoneinfo/Europe/Stockholm /mnt/etc/localtime
+ln -sf /usr/share/zoneinfo/Europe/Stockholm /etc/localtime
 hwclock --systohc
 
 # Ställa in språk och layout
-echo "sv_SE.UTF-8 UTF-8" >> /mnt/etc/locale.gen
+echo "sv_SE.UTF-8 UTF-8" >> /etc/locale.gen
 locale-gen
-echo "LANG=sv_SE.UTF-8" >> /mnt/etc/locale.conf
-echo "KEYMAP=sv-latin1" > /mnt/etc/vconsole.conf
+echo "LANG=sv_SE.UTF-8" >> /etc/locale.conf
+echo "KEYMAP=sv-latin1" > /etc/vconsole.conf
 
 # Fråga användaren efter hostname
 read -p "Ange hostname: " hostname
 
 # Skriv hostname till /etc/hostname
-echo $hostname | tee -a /mnt/etc/hostname
+echo $hostname | tee -a /etc/hostname
 
 # Uppdatera aktuellt hostname
 hostname $hostname
@@ -80,15 +89,12 @@ hostname $hostname
 echo "Hostname uppdaterat till $hostname"
 
 # Konfigurerar Nätverk
-echo "127.0.0.1 localhost" | tee -a /mnt/etc/hosts
-echo "::1       localhost" | tee -a /mnt/etc/hosts
-echo "127.0.1.1 arch-laptop.localdomain arch-laptop" | tee -a /mnt/etc/hosts
+echo "127.0.0.1 localhost" | tee -a /etc/hosts
+echo "::1       localhost" | tee -a /etc/hosts
+echo "127.0.1.1 arch-laptop.localdomain arch-laptop" | tee -a /etc/hosts
 echo "::1        localhost ip6-localhost ip6-loopback" | tee -a /etc/hosts
-echo "ff02::1    ip6-allnodes" | tee -a /mnt/etc/hosts
-echo "ff02::2    ip6-allrouters" | tee -a /mnt/etc/hosts
-
-# Generera fstab
-genfstab -U /mnt >> /mnt/etc/fstab
+echo "ff02::1    ip6-allnodes" | tee -a /etc/hosts
+echo "ff02::2    ip6-allrouters" | tee -a /etc/hosts
 
 # Skapa en array av val
 val_array=($val)
@@ -139,12 +145,6 @@ done
 sudo pacman -Sy
 sudo pacman -S "${paket_array[@]}" efibootmgr
 
-# Kopiera over scriptet till det nya systemet
-cp $0 /mnt
-
-# Chroot in till det nya systemet
-arch-chroot /mnt /bin/bash <<EOF
-
 # Set the root password
 echo Ange root lösenord
 passwd
@@ -174,7 +174,7 @@ cat /boot/loader/entries/arch.conf
 title Arch Linux
 linux /vmlinuz-linux
 initrd /initramfs-linux.img
-options root=/dev/nvme0n1p3 rw
+options root=/dev/vda3 rw
 
 # Array med systemd-tjänster att söka efter
 services=("NetworkManager" "sddm" "gdm" "lightdm fstrim.service fstrim.timer")
@@ -231,4 +231,6 @@ usermod -aG sudo $username
 # Fråga efter lösenord för användaren
 passwd $username
 
-echo "Installationen är klar." EOF
+echo "Installationen är klar." 
+
+EOF
