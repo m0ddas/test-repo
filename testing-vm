@@ -41,7 +41,6 @@ else
   swapon /dev/vda2
   mkfs.ext4 /dev/vda3
 fi
-
 done
 
 # Monteringspunkt för /, /boot och /home
