@@ -1,0 +1,243 @@
+#!/bin/bash
+clear
+echo -e "\n"
+echo -e "\n"
+echo -e "\n"
+echo "Välkommen till Arch Linux installationen"
+echo -e "\n"
+echo -e "\n"
+echo -e "\n"
+# Fråga användaren om hårddisken behöver partitioneras
+read -p "Behöver du partitionera hårddisken? (y/n): " partition
+
+# Om användaren väljer att partitionera hårddisken
+ if [ "$partition" == "y" ]; then
+  # Skapa partitioner för /boot efi, swap, / och /home
+  parted /dev/nvme0n1 gpt mkpart primary fat32 1MiB 1GiB set 1 esp on
+  parted /dev/nvme0n1 mkpart primary linux-swap 1GiB 4GiB
+  parted /dev/nvme0n1 mkpart primary ext4 4GiB 30GiB
+  parted /dev/nvme0n1 mkpart primary ext4 30GiB 100% 
+
+  # Formatera partitionerna för /boot efi, swap, / och /home
+  mkfs.fat -F32 /dev/nvme0n1p1
+  mkswap /dev/nvme0n1p2
+  swapon /dev/nvme0n1p2
+  mkfs.ext4 /dev/nvme0n1p3
+  mkfs.ext4 /dev/nvme0n1p4
+
+# Om användaren väljer att inte partitionera hårddisken
+else
+  # Fråga användaren om partitionen /dev/nvme0n1p4 ska formateras
+  read -p "Vill du formatera /dev/nvme0n1p4? (y/n): " format
+
+  # Om användaren väljer att formatera partitionen
+  if [ "$format" == "y" ]; then
+    mkfs.ext4 /dev/nvme0n1p4
+  fi
+
+  # Formatera partitionerna för /boot efi, swap och /home
+  mkfs.fat -F32 /dev/nvme0n1p1
+  mkswap /dev/nvme0n1p2
+  swapon /dev/nvme0n1p2
+  mkfs.ext4 /dev/nvme0n1p3
+fi
+done
+
+# Monteringspunkt för /, /boot och /home
+mount /dev/nvme0n1p3 /mnt
+mkdir /mnt/boot
+mkdir /mnt/home
+mount /dev/nvme0n1p1 /mnt/boot
+mount /dev/nvme0n1p4 /mnt/home
+
+# Gör ändringar i pacman.conf
+
+sed -i 's/^#\[multilib\]/\[multilib\]/' /etc/pacman.conf
+sed -i 's/^#Color/Color/' /etc/pacman.conf
+sed -i 's/^#ParallelDownloads/ParallelDownloads/' /etc/pacman.conf
+
+# Installera Arch Linux bas systemet
+pacstrap /mnt base base-devel linux linux-firmware nano
+
+# Generera fstab
+genfstab -U /mnt >> /mnt/etc/fstab
+
+# Kopiera over scriptet till det nya systemet
+cp $0 /mnt
+
+# Chroot in till det nya systemet
+arch-chroot /mnt /bin/bash <<EOF
+
+# Ställa in tidszon och klocka
+ln -sf /usr/share/zoneinfo/Europe/Stockholm /etc/localtime
+hwclock --systohc
+
+# Ställa in språk och layout
+echo "sv_SE.UTF-8 UTF-8" >> /etc/locale.gen
+locale-gen
+echo "LANG=sv_SE.UTF-8" >> /etc/locale.conf
+echo "KEYMAP=sv-latin1" > /etc/vconsole.conf
+
+# Fråga användaren efter hostname
+read -p "Ange hostname: " hostname
+
+# Skriv hostname till /etc/hostname
+echo $hostname | tee -a /etc/hostname
+
+# Uppdatera aktuellt hostname
+hostname $hostname
+
+echo "Hostname uppdaterat till $hostname"
+
+# Konfigurerar Nätverk
+echo "127.0.0.1 localhost" | tee -a /etc/hosts
+echo "::1       localhost" | tee -a /etc/hosts
+echo "127.0.1.1 arch-laptop.localdomain arch-laptop" | tee -a /etc/hosts
+echo "::1       localhost ip6-localhost ip6-loopback" | tee -a /etc/hosts
+echo "ff02::1   ip6-allnodes" | tee -a /etc/hosts
+echo "ff02::2   ip6-allrouters" | tee -a /etc/hosts
+
+# Skapa en array av val
+val_array=($val)
+
+# Skapa en array av paket att installera
+paket_array=()
+
+for i in "${val_array[@]}"
+do
+  case $i in
+    1) 
+      echo "Du valde att installera KDE."
+      paket_array+=("xorg xorg-server sddm plasma networkmanager kcalc konsole kate gwenview dolphin kpmcore xdg-user-dirs sudo partitionmanager ark")
+      ;;
+    2) 
+      echo "Du valde att installera Gnome."
+      paket_array+=(" xorg xorg-server gdm gnome networkmanager gedit gnome-tweaks gparted")
+      ;;
+    3)
+      echo "Du valde att installera XFCE."
+      paket_array+=("lightdm lightdm-gtk-greeter xfce4 xfce4-goodies gvfs sudo")
+      ;;
+    4)
+      echo "Du valde att installera Deepin."
+      paket_array+=("lightdm-gtk-greeter deepin deepin-extra")
+      ;;
+    5)
+      echo "Du valde att installera Gaming tools"
+      paket_array+=("wine wine-gecko wine-mono winetricks lutris steam")
+      ;;
+    6)
+      echo "Du valde att installera Nvidia Utils"
+      paket_array+=("nvidia nvidia-settings nvidia-utils lib32-nvidia-utils opencl-nvidia lib32-opencl-nvidia vulkan-icd-loader lib32-vulkan-icd-loader libvdpau libxnvctrl")
+      ;;
+    7)
+      echo "Du valde att installera Applications"
+      paket_array+=("fuse libreoffice-fresh-sv firefox vlc qbittorrent flatpak")
+      ;;
+    8)
+      echo "Du valde att installera System Utils"
+      paket_array+=("htop p7zip unrar unarchiver lzop lrzip git fish")
+      ;;
+    *) echo "Felaktigt val. Hoppa över."; continue;;
+  esac
+done
+
+# Installera paketen som en del av en enda installation
+sudo pacman -Sy
+sudo pacman -S "${paket_array[@]}" efibootmgr
+
+# Set the root password
+echo Ange root lösenord
+passwd
+
+# Aktivera multilib i pacman.conf
+read -p "Enable multilib repositories? (y/n)" answer
+if [[ "$answer" == [yY] ]]; then
+    sed -i 's/^#\[multilib\]/\[multilib\]/' /etc/pacman.conf
+fi
+
+read -p "Enable pacman color output? (y/n)" answer
+if [[ "$answer" == [yY] ]]; then
+    sed -i 's/^#Color/Color/' /etc/pacman.conf
+fi
+
+read -p "Enable Parallel Downloads? (y/n)" answer
+if [[ "$answer" == [yY] ]]; then
+    sed -i 's/^#ParallelDownloads/ParallelDownloads/' /etc/pacman.conf
+fi
+done
+
+# Install and configure the bootloader (systemd-boot in this example)
+bootctl install
+cat /boot/loader/loader.conf
+default arch
+timeout 3
+editor 0
+cat /boot/loader/entries/arch.conf
+title Arch Linux
+linux /vmlinuz-linux
+initrd /initramfs-linux.img
+options root=/dev/nvme0n1p3 rw
+
+# Array med systemd-tjänster att söka efter
+services=("NetworkManager" "sddm" "gdm" "lightdm fstrim.service fstrim.timer")
+
+echo "Söker efter systemd-tjänster..."
+
+# Loopa igenom varje tjänst och kontrollera om den är installerad
+for service in "${services[@]}"
+do
+    if systemctl status "$service" >/dev/null 2>&1; then
+        echo "$service är installerad."
+        installed=true
+    else
+        echo "$service är inte installerad."
+        installed=false
+    fi
+
+    # Om tjänsten är installerad, skapa alternativ för att starta den
+    if $installed; then
+        while true; do
+            read -p "Vill du aktivera och starta $service? (ja/nej): " choice
+            case "$choice" in
+                ja|JA|Ja)
+                    sudo systemctl enable "$service"
+                    sudo systemctl start "$service"
+                    echo "$service har aktiverats och startats."
+                    break
+                    ;;
+                nej|NEJ|Nej)
+                    echo "$service aktiverades och startades inte."
+                    break
+                    ;;
+                *)
+                    echo "Felaktigt val. Försök igen."
+                    ;;
+            esac
+        done
+    fi
+done
+
+lsblk -no UUID,TYPE | while read uuid type; do
+    if [ "$type" != "swap" ]; then
+        # Add the discard flag to fstab
+        sed -i "s/UUID=$uuid.*/& ,discard/" /etc/fstab
+
+        # Discard unused blocks on the partition
+        tune2fs -o discard /dev/disk/by-uuid/$uuid
+    fi
+done
+
+# Fråga efter användarnamn
+read -p "Ange önskat användarnamn: " username
+
+# Lägg till användaren i sudo-gruppen
+useradd -m $username
+usermod -aG sudo $username
+
+# Fråga efter lösenord för användaren
+passwd $username
+
+echo "Installationen är klar." 
+
+EOF
